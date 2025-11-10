@@ -12,21 +12,25 @@ public class DroneDelivery {
     class Job {
         String id;
         int weight;
-        int time;
-        int cost;
-        Job(String id, int weight, int time, int cost) {
+        int distance;
+        int value;
+
+        Job(String id, int weight, int distance, int value) {
             this.id = id;
             this.weight = weight;
-            this.time = time;
-            this.cost = cost;
+            this.distance = distance;
+            this.value = value;
+        }
+
+        double batteryCost() {
+            return distance * (1.0 + 0.1 * weight);
         }
     }
 
     private ArrayList<Job> jobs = new ArrayList<>();
     private ArrayList<Job> selectedJobs = new ArrayList<>();
 
-    private Integer[][] memo;     // for memoization DP
-    private int[][] dp;          // for tabulation DP
+    private Map<String, Integer> memoMap; // for memoization
 
     // Constructor: reads job data from file
     public DroneDelivery(String filename) throws Exception {
@@ -34,117 +38,115 @@ public class DroneDelivery {
         while (scan.hasNext()) {
             String id = scan.next();
             int weight = scan.nextInt();
-            int time = scan.nextInt();
-            int cost = scan.nextInt();
-            jobs.add(new Job(id, weight, time, cost));
+            int distance = scan.nextInt();
+            int value = scan.nextInt();
+            jobs.add(new Job(id, weight, distance, value));
         }
         scan.close();
     }
 
-    // ====================================================================
-    // ✅ 1. PURE RECURSIVE SOLUTION (NO DP)
-    // ====================================================================
-    public int maxCostRecursive(double maxWeight, int maxTime) {
+    // ============================
+    // 1. Pure recursive solution
+    // ============================
+    public int maxCostRecursive(double maxBattery, int maxPayload) {
         selectedJobs.clear();
-        return maxCostRecursiveHelper(jobs.size() - 1, maxWeight, maxTime);
+        return maxCostRecursiveHelper(jobs.size() - 1, maxBattery, maxPayload);
     }
 
-    private int maxCostRecursiveHelper(int i, double remainWeight, int remainTime) {
-        if (i < 0 || remainWeight <= 0 || remainTime <= 0) return 0;
+    private int maxCostRecursiveHelper(int i, double remainBattery, int remainPayload) {
+        if (i < 0) return 0;
 
         Job job = jobs.get(i);
+        double batteryNeeded = job.batteryCost();
 
-        // Option 1: skip job
-        int exclude = maxCostRecursiveHelper(i - 1, remainWeight, remainTime);
+        // Option 1: skip
+        int exclude = maxCostRecursiveHelper(i - 1, remainBattery, remainPayload);
 
-        // Option 2: take job (if possible)
+        // Option 2: take
         int include = 0;
-        if (job.weight <= remainWeight && job.time <= remainTime) {
-            include = job.cost + maxCostRecursiveHelper(i - 1, remainWeight - job.weight, remainTime - job.time);
+        if (job.weight <= remainPayload && batteryNeeded <= remainBattery) {
+            include = job.value + maxCostRecursiveHelper(i - 1, remainBattery - batteryNeeded, remainPayload - job.weight);
         }
 
         return Math.max(include, exclude);
     }
 
-    // ====================================================================
-    // ✅ 2. MEMOIZATION DP SOLUTION
-    // ====================================================================
-    public int maxCostMemo(double maxWeight, int maxTime) {
+    // ============================
+    // 2. Memoization solution
+    // ============================
+    public int maxCostMemo(double maxBattery, int maxPayload) {
         selectedJobs.clear();
-        memo = new Integer[jobs.size()][maxTime + 1];
-        return maxCostMemoHelper(jobs.size() - 1, maxWeight, maxTime);
+        memoMap = new HashMap<>();
+        return maxCostMemoHelper(jobs.size() - 1, maxBattery, maxPayload);
     }
 
-    private int maxCostMemoHelper(int i, double remainWeight, int remainTime) {
-        if (i < 0 || remainWeight <= 0 || remainTime <= 0) return 0;
+    private int maxCostMemoHelper(int i, double remainBattery, int remainPayload) {
+        if (i < 0) return 0;
 
-        if (memo[i][remainTime] != null && remainWeight % 1 == 0) {
-            return memo[i][remainTime];
-        }
+        String key = i + "|" + (int)(remainBattery * 10) + "|" + remainPayload;
+        if (memoMap.containsKey(key)) return memoMap.get(key);
 
         Job job = jobs.get(i);
+        double batteryNeeded = job.batteryCost();
 
-        int exclude = maxCostMemoHelper(i - 1, remainWeight, remainTime);
+        int exclude = maxCostMemoHelper(i - 1, remainBattery, remainPayload);
 
         int include = 0;
-        if (job.weight <= remainWeight && job.time <= remainTime) {
-            include = job.cost + maxCostMemoHelper(i - 1, remainWeight - job.weight, remainTime - job.time);
+        if (job.weight <= remainPayload && batteryNeeded <= remainBattery) {
+            include = job.value + maxCostMemoHelper(i - 1, remainBattery - batteryNeeded, remainPayload - job.weight);
         }
 
         int result = Math.max(include, exclude);
-
-        if (remainWeight % 1 == 0)
-            memo[i][remainTime] = result;
-
+        memoMap.put(key, result);
         return result;
     }
 
-    // ====================================================================
-    // ✅ 3. TABULATION DP (BOTTOM-UP) — also stores selected jobs
-    // ====================================================================
-    public int maxCostTab(double maxWeight, int maxTime) {
+    // ============================
+    // 3. Tabulation (bottom-up)
+    // ============================
+    public int maxCostTab(double maxBattery, int maxPayload) {
         selectedJobs.clear();
-        int W = (int) maxWeight;
-        dp = new int[jobs.size() + 1][maxTime + 1];
+        int n = jobs.size();
+        int batteryLimit = (int) Math.ceil(maxBattery * 10); // discretize battery
+        int[][] dp = new int[n + 1][batteryLimit + 1];
 
-        for (int i = 1; i <= jobs.size(); i++) {
+        // Build table
+        for (int i = 1; i <= n; i++) {
             Job job = jobs.get(i - 1);
-            for (int t = 0; t <= maxTime; t++) {
-                dp[i][t] = dp[i - 1][t];
-                if (job.weight <= W && job.time <= t) {
-                    dp[i][t] = Math.max(dp[i][t], job.cost + dp[i - 1][t - job.time]);
+            int weight = job.weight;
+            int batteryCost = (int) Math.ceil(job.batteryCost() * 10);
+
+            for (int b = 0; b <= batteryLimit; b++) {
+                dp[i][b] = dp[i - 1][b];
+                if (weight <= maxPayload && batteryCost <= b) {
+                    dp[i][b] = Math.max(dp[i][b], job.value + dp[i - 1][b - batteryCost]);
                 }
             }
         }
 
-        reconstructSelection(W, maxTime);
-        return dp[jobs.size()][maxTime];
-    }
-
-    // backtrack to find the selected jobs
-    private void reconstructSelection(int maxWeight, int maxTime) {
-        int t = maxTime;
-        int w = maxWeight;
-
-        for (int i = jobs.size(); i > 0; i--) {
-            if (dp[i][t] != dp[i - 1][t]) {
-                Job job = jobs.get(i - 1);
+        // Reconstruct selected jobs
+        int b = batteryLimit;
+        for (int i = n; i > 0; i--) {
+            Job job = jobs.get(i - 1);
+            int batteryCost = (int) Math.ceil(job.batteryCost() * 10);
+            if (b >= batteryCost && dp[i][b] != dp[i - 1][b]) {
                 selectedJobs.add(job);
-                t -= job.time;
-                w -= job.weight;
+                b -= batteryCost;
+                maxPayload -= job.weight;
             }
         }
+
+        Collections.reverse(selectedJobs);
+        return dp[n][batteryLimit];
     }
 
-    // ====================================================================
-    // ✅ DISPLAY SELECTED JOBS (used by driver)
-    // ====================================================================
+    // ============================
+    // Display selected jobs
+    // ============================
     public void displaySelectedJobs() {
-        Collections.reverse(selectedJobs);
         for (Job j : selectedJobs) {
-            System.out.println(j.id + " Weight:" + j.weight + " Time:" + j.time + " Cost:" + j.cost);
+            System.out.println(j.id);
         }
         System.out.println();
     }
-
 }
