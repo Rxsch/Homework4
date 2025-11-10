@@ -1,4 +1,4 @@
-/* INSERT YOUR NAME HERE
+/* Daniel Rangosch
    Dr. Steinberg
    COP3503 Fall 2025
    Programming Assignment 4
