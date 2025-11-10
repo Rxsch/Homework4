@@ -55,7 +55,10 @@ public class DroneDelivery {
 	// Compute maximum value recursively
 	public int maxCostRecursive(double maxBattery, int maxPayload) {
 		selectedJobs.clear();
-		return maxCostRecursiveHelper(jobs.size() - 1, maxBattery, maxPayload);
+		int n = jobs.size();
+		int maxValue = maxCostRecursiveHelper(n - 1, maxBattery, maxPayload);
+		reconstructSelectedJobsRecursive(maxBattery, maxPayload);
+		return maxValue;
 	}
 
 	// Recursive helper method
@@ -78,13 +81,43 @@ public class DroneDelivery {
 		return Math.max(include, exclude);
 	}
 
+	// Reconstruct selected jobs for recursion
+	private void reconstructSelectedJobsRecursive(double maxBattery, int maxPayload) {
+		selectedJobs.clear();
+		int i = jobs.size() - 1;
+		double remainBattery = maxBattery;
+		int remainPayload = maxPayload;
+
+		while (i >= 0) {
+			Job job = jobs.get(i);
+			double batteryNeeded = job.batteryCost();
+			int exclude = maxCostRecursiveHelper(i - 1, remainBattery, remainPayload);
+			int include = 0;
+			if (job.weight <= remainPayload && batteryNeeded <= remainBattery) {
+				include = job.value + maxCostRecursiveHelper(
+				              i - 1, remainBattery - batteryNeeded, remainPayload - job.weight
+				          );
+			}
+			if (include > exclude) {
+				selectedJobs.add(job);
+				remainBattery -= batteryNeeded;
+				remainPayload -= job.weight;
+			}
+			i--;
+		}
+		Collections.reverse(selectedJobs);
+	}
+
 	// MEMOIZATION DP
 
 	// Compute maximum value using memoization
 	public int maxCostMemo(double maxBattery, int maxPayload) {
 		selectedJobs.clear();
 		memoMap = new HashMap<>();
-		return maxCostMemoHelper(jobs.size() - 1, maxBattery, maxPayload);
+		int n = jobs.size();
+		int maxValue = maxCostMemoHelper(n - 1, maxBattery, maxPayload);
+		reconstructSelectedJobsMemo(maxBattery, maxPayload);
+		return maxValue;
 	}
 
 	// Memoization helper method
@@ -102,7 +135,6 @@ public class DroneDelivery {
 		int exclude = maxCostMemoHelper(i - 1, remainBattery, remainPayload);
 
 		// Option 2: try including this job
-
 		int include = 0;
 		if (job.weight <= remainPayload && batteryNeeded <= remainBattery) {
 			include = job.value + maxCostMemoHelper(
@@ -114,6 +146,34 @@ public class DroneDelivery {
 		memoMap.put(key, result);
 		return result;
 	}
+
+	// Reconstruct selected jobs for memoization
+	private void reconstructSelectedJobsMemo(double maxBattery, int maxPayload) {
+		selectedJobs.clear();
+		int i = jobs.size() - 1;
+		double remainBattery = maxBattery;
+		int remainPayload = maxPayload;
+
+		while (i >= 0) {
+			Job job = jobs.get(i);
+			double batteryNeeded = job.batteryCost();
+			int exclude = maxCostMemoHelper(i - 1, remainBattery, remainPayload);
+			int include = 0;
+			if (job.weight <= remainPayload && batteryNeeded <= remainBattery) {
+				include = job.value + maxCostMemoHelper(
+				              i - 1, remainBattery - batteryNeeded, remainPayload - job.weight
+				          );
+			}
+			if (include > exclude) {
+				selectedJobs.add(job);
+				remainBattery -= batteryNeeded;
+				remainPayload -= job.weight;
+			}
+			i--;
+		}
+		Collections.reverse(selectedJobs);
+	}
+
 	// TABULATION DP (BOTTOM-UP)
 
 	// Compute maximum value using bottom-up DP
@@ -154,7 +214,6 @@ public class DroneDelivery {
 			}
 		}
 		Collections.reverse(selectedJobs);
-
 		return dp[n][batteryLimit];
 	}
 
